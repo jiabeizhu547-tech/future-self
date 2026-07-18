@@ -1,11 +1,19 @@
-dist/
-deploy_versions/
-.temp/
-.rn_temp/
 node_modules/
+dist/
 .DS_Store
-.swc
 *.local
 
-# 云函数含 Key 的配置文件
-cloud/functions/deepseek/config.json
+# Vite
+.vite/
+
+# IDE
+.idea/
+*.swp
+*.swo
+
+# SWC platform-specific binaries
+.swc/
+
+# env (API Key 等敏感信息)
+.env.local
+.env.*.local

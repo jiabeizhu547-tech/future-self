@@ -1,8 +1,6 @@
 // 日志富化：把一条记录发给 DeepSeek，返回结构化情绪/信号。
 // 传输层走 ai/client.ts（云函数优先 → 直连回退），Key 管理也统一到 client.ts。
 
-import Taro from '@tarojs/taro';
-
 import { callDeepSeek, extractContent, getApiKey } from '@/ai/client';
 import { getEntry, saveEnrichment } from '@/services/storage';
 import { Enrichment, Signal, SignalDirection } from '@/types/models';

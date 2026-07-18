@@ -1,203 +1,285 @@
-import { Button, Slider, Text, Textarea, View } from '@tarojs/components';
-import Taro, { useDidShow } from '@tarojs/taro';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
-import { enrichEntry, hasApiKey } from '@/ai/enrich';
-import { createEntry, getEnrichmentMap, listEntries } from '@/services/storage';
-import { Enrichment, Entry } from '@/types/models';
-import { formatDayLabel, formatTime } from '@/utils/date';
+import { createEntry, listEntries } from '@/services/storage'
+import { enrichEntry, hasApiKey } from '@/ai/enrich'
+import { Entry } from '@/types/models'
+import { formatDayLabel, formatTime } from '@/utils/date'
+import { AnimatedPage } from '@/components/AnimatedPage'
+import { GlassCard } from '@/components/GlassCard'
+import { useTheme, MOOD_META } from '@/contexts/ThemeContext'
 
-import './index.scss';
+/* ---------- 常量 ---------- */
 
-const MOOD_TEXT = ['很低落', '低落', '平静', '不错', '很好']; // index = mood + 2
+const MOOD_EMOJIS = ['😡', '🙁', '😐', '🙂', '😄']
+const MOOD_VALUES = [-2, -1, 0, 1, 2]
+
+/* ---------- 工具 ---------- */
 
 interface DaySection {
-  day: string;
-  entries: Entry[];
+  day: string
+  entries: Entry[]
 }
 
 function groupByDay(list: Entry[]): DaySection[] {
-  const map: Record<string, Entry[]> = {};
-  const order: string[] = [];
+  const map: Record<string, Entry[]> = {}
+  const order: string[] = []
   for (const e of list) {
     if (!map[e.day]) {
-      map[e.day] = [];
-      order.push(e.day);
+      map[e.day] = []
+      order.push(e.day)
     }
-    map[e.day].push(e);
+    map[e.day].push(e)
   }
-  return order.map((day) => ({ day, entries: map[day] }));
+  return order.map((day) => ({ day, entries: map[day] }))
 }
 
+/** 动态问候语 + 子标题 */
+function getGreeting(): { title: string; subtitle: string } {
+  const h = new Date().getHours()
+  if (h < 6) return { title: '夜深了', subtitle: '还有什么在心头？写下来，明天会不一样。' }
+  if (h < 9) return { title: '早上好', subtitle: '新的一天，此刻你在想什么？' }
+  if (h < 12) return { title: '上午好', subtitle: '捕捉此刻的念头，让它们不再飘散。' }
+  if (h < 14) return { title: '中午好', subtitle: '午间的思绪，也许藏着今天的答案。' }
+  if (h < 18) return { title: '下午好', subtitle: '写下来，把今天的感受收进时间之镜。' }
+  if (h < 21) return { title: '傍晚好', subtitle: '一天将尽，回顾此刻最真实的感受。' }
+  return { title: '晚上好', subtitle: '把今天的思绪倒进时间之镜，看看会流向哪里。' }
+}
+
+/* ---------- 首页组件 ---------- */
+
 export default function Index() {
-  const [content, setContent] = useState('');
-  const [showMeta, setShowMeta] = useState(false);
-  const [mood, setMood] = useState(0); // -2..2
-  const [anxiety, setAnxiety] = useState(3); // 0..10
-  const [sections, setSections] = useState<DaySection[]>([]);
-  const [enrichMap, setEnrichMap] = useState<Record<string, Enrichment>>({});
-  const [analyzingId, setAnalyzingId] = useState<string | null>(null);
-  const [keyReady, setKeyReady] = useState(false);
+  const navigate = useNavigate()
+  const theme = useTheme()
+  const moodMeta = MOOD_META[theme.mood]
+  const [pulsing, setPulsing] = useState(false)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const pulseTimer = useRef<ReturnType<typeof setTimeout>>()
+
+  /* 表单状态 */
+  const [content, setContent] = useState('')
+  const [showMeta, setShowMeta] = useState(false)
+  const [mood, setMood] = useState(0)
+  const [anxiety, setAnxiety] = useState(3)
+
+  /* 列表状态 */
+  const [sections, setSections] = useState<DaySection[]>([])
 
   const refresh = useCallback(() => {
-    setSections(groupByDay(listEntries()));
-    setEnrichMap(getEnrichmentMap());
-    setKeyReady(hasApiKey());
-  }, []);
+    setSections(groupByDay(listEntries()))
+  }, [])
 
-  useDidShow(() => {
-    refresh();
-  });
+  useEffect(() => {
+    refresh()
+  }, [refresh])
 
-  async function handleSave() {
-    const text = content.trim();
-    if (!text) return;
+  /* 微光脉冲：聚焦时启动，失焦时停止 */
+  const handleFocus = useCallback(() => {
+    setPulsing(true)
+    if (pulseTimer.current) clearTimeout(pulseTimer.current)
+  }, [])
+
+  const handleBlur = useCallback(() => {
+    // 延迟关闭，让动画自然过渡
+    pulseTimer.current = setTimeout(() => setPulsing(false), 600)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (pulseTimer.current) clearTimeout(pulseTimer.current)
+    }
+  }, [])
+
+  function handleSave() {
+    const text = content.trim()
+    if (!text) return
     const entry = createEntry({
       content: text,
       mood: showMeta ? mood : null,
       anxiety: showMeta ? anxiety : null,
-    });
-    setContent('');
-    setShowMeta(false);
-    setMood(0);
-    setAnxiety(3);
-    refresh();
-
-    // 后台 AI 分析:不阻塞记录,失败也不影响已记下的内容
-    if (!hasApiKey()) return;
-    setAnalyzingId(entry.id);
-    const res = await enrichEntry(entry.id);
-    setAnalyzingId(null);
-    if (res.ok) {
-      refresh();
-    } else if (res.error.kind !== 'no_key') {
-      Taro.showToast({ title: '这条 AI 分析失败,可进详情页重试', icon: 'none' });
+    })
+    setContent('')
+    setShowMeta(false)
+    setMood(0)
+    setAnxiety(3)
+    refresh()
+    // 保存后异步调用 AI 分析（不 await，不阻塞 UI）
+    if (hasApiKey()) {
+      enrichEntry(entry.id)
     }
+    // 触发情绪主题重新计算
+    window.dispatchEvent(new Event('storage'))
   }
 
-  const canSave = content.trim().length > 0;
+  const canSave = content.trim().length > 0
+  const greeting = getGreeting()
 
   return (
-    <View className='page'>
-      <View className='composer'>
-        <Text className='hint'>此刻在想什么?哪怕最琐碎的念头也记下来。</Text>
-        <Textarea
-          className='input'
-          value={content}
-          onInput={(e) => setContent(e.detail.value)}
-          placeholder='今天的一个想法、感受、观察,见了谁、什么状态…'
-          autoHeight
-          maxlength={-1}
-        />
+    <AnimatedPage>
+      <div className="page">
+        {/* ====== 动态问候 + 情绪折射色 ====== */}
+        <div className="glass-header" style={{ border: 'none' }}>
+          <div>
+            <h1 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {greeting.title}
+              {/* 情绪折射色指示器 */}
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  background: moodMeta.color,
+                  boxShadow: `0 0 12px ${moodMeta.color}66`,
+                  transition: 'all var(--dur-slow)',
+                }}
+                title={`当前情绪基调: ${moodMeta.label}`}
+              />
+            </h1>
+            <span className="subtitle">{greeting.subtitle}</span>
+          </div>
+        </div>
 
-        {showMeta ? (
-          <View className='meta'>
-            <Text className='meta-label'>心情:{MOOD_TEXT[mood + 2]}</Text>
-            <Slider
-              min={-2}
-              max={2}
-              step={1}
-              value={mood}
-              activeColor='#34c759'
-              blockSize={20}
-              onChanging={(e) => setMood(e.detail.value)}
-              onChange={(e) => setMood(e.detail.value)}
-            />
-            <Text className='meta-label'>焦虑:{anxiety}/10</Text>
-            <Slider
-              min={0}
-              max={10}
-              step={1}
-              value={anxiety}
-              activeColor='#ff9500'
-              blockSize={20}
-              onChanging={(e) => setAnxiety(e.detail.value)}
-              onChange={(e) => setAnxiety(e.detail.value)}
-            />
-            <Text className='meta-toggle' onClick={() => setShowMeta(false)}>
-              收起
-            </Text>
-          </View>
+        {/* ====== 超透玻璃输入区 (Utility Glass) ====== */}
+        <GlassCard className="glass-card-mood" style={{ padding: 'var(--space-xl)' }}>
+          <textarea
+            ref={inputRef}
+            className={`glass-input-utility${pulsing ? ' pulsing' : ''}`}
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+            placeholder="今天的一个想法、感受、观察，见了谁、什么状态…"
+            rows={4}
+          />
+
+          {showMeta ? (
+            <div style={{ marginTop: 16 }}>
+              {/* 情绪选择 */}
+              <div className="glass-mood-selector">
+                {MOOD_VALUES.map((val) => (
+                  <button
+                    key={val}
+                    className={`glass-mood-btn${mood === val ? ' selected' : ''}`}
+                    onClick={() => setMood(val)}
+                  >
+                    {MOOD_EMOJIS[val + 2]}
+                  </button>
+                ))}
+              </div>
+
+              {/* 焦虑滑块 */}
+              <div className="glass-slider-row" style={{ marginTop: 12 }}>
+                <label>焦虑</label>
+                <input
+                  type="range"
+                  min={0}
+                  max={10}
+                  step={1}
+                  value={anxiety}
+                  onChange={(e) => setAnxiety(Number(e.target.value))}
+                />
+                <span className="slider-value">{anxiety}</span>
+              </div>
+
+              <span
+                style={{ display: 'inline-block', marginTop: 8, fontSize: 13, color: 'var(--c-text-muted)', cursor: 'pointer' }}
+                onClick={() => setShowMeta(false)}
+              >
+                收起心情标记
+              </span>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 }}>
+              <span
+                style={{ fontSize: 13, color: 'var(--c-text-muted)', cursor: 'pointer' }}
+                onClick={() => setShowMeta(true)}
+              >
+                ＋ 标记心情 / 焦虑（可选）
+              </span>
+            </div>
+          )}
+
+          <button
+            className="glass-btn-hero"
+            disabled={!canSave}
+            onClick={handleSave}
+            style={{
+              marginTop: 16,
+              background: canSave ? `linear-gradient(135deg, ${moodMeta.color}, ${moodMeta.color}cc)` : undefined,
+              boxShadow: canSave ? `0 4px 16px ${moodMeta.glow}` : undefined,
+            }}
+          >
+            记下来 — 存入时间之镜
+          </button>
+        </GlassCard>
+
+        {/* ====== 记录列表 ====== */}
+        {sections.length === 0 ? (
+          <div className="empty">
+            <div className="empty-icon"
+              style={{
+                background: `linear-gradient(135deg, ${moodMeta.color}22, transparent)`,
+                borderRadius: '50%',
+                width: 80,
+                height: 80,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto var(--space-xl)',
+              }}
+            >
+              📝
+            </div>
+            <h3>时间之镜还是空的</h3>
+            <p>在上面写下第一条记录，看看它会流向怎样的未来。</p>
+          </div>
         ) : (
-          <Text className='meta-toggle' onClick={() => setShowMeta(true)}>
-            ＋ 标记心情 / 焦虑(可选)
-          </Text>
+          <div>
+            {sections.map((sec) => (
+              <div key={sec.day}>
+                <div
+                  className="flex items-center justify-between"
+                  style={{ padding: '12px 4px 8px' }}
+                >
+                  <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--c-text)' }}>
+                    {formatDayLabel(sec.day)}
+                  </span>
+                  <span style={{ fontSize: 13, color: 'var(--c-text-muted)' }}>
+                    {sec.entries.length} 条记录
+                  </span>
+                </div>
+
+                {sec.entries.map((e, i) => (
+                  <GlassCard
+                    key={e.id}
+                    delay={i * 0.03}
+                    onClick={() => navigate(`/detail/${e.id}`)}
+                    style={{ cursor: 'pointer', marginBottom: 10 }}
+                  >
+                    <div className="entry-date">
+                      {formatTime(e.created_at)}
+                      {e.mood !== null && (
+                        <span style={{ marginLeft: 6 }}>{MOOD_EMOJIS[e.mood + 2]}</span>
+                      )}
+                    </div>
+                    <div className="entry-content">{e.content}</div>
+                    {(e.mood !== null || e.anxiety !== null) && (
+                      <div className="entry-meta" style={{ marginTop: 8 }}>
+                        {e.anxiety !== null && (
+                          <span className="glass-chip" style={{ fontSize: 11 }}>
+                            焦虑 {e.anxiety}/10
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </GlassCard>
+                ))}
+              </div>
+            ))}
+          </div>
         )}
-
-        <Button
-          className={`save-btn ${canSave ? '' : 'disabled'}`}
-          disabled={!canSave}
-          onClick={handleSave}>
-          记下来
-        </Button>
-
-        <View className='me-row'>
-          <Text
-            className='link nav-link'
-            onClick={() => Taro.navigateTo({ url: '/pages/trends/index' })}>
-            📈 趋势
-          </Text>
-          <Text
-            className='link nav-link'
-            onClick={() => Taro.navigateTo({ url: '/pages/future/index' })}>
-            🔮 未来
-          </Text>
-          <Text
-            className='link nav-link'
-            onClick={() => Taro.navigateTo({ url: '/pages/me/index' })}>
-            我的 / 关于
-          </Text>
-        </View>
-
-        {!keyReady ? (
-          <Text
-            className='key-hint'
-            onClick={() => Taro.navigateTo({ url: '/pages/me/index' })}>
-            💡 想让 AI 自动分析情绪?去「我的」填一次 DeepSeek Key
-          </Text>
-        ) : null}
-      </View>
-
-      {sections.length === 0 ? (
-        <View className='empty'>还没有记录。上面写下第一条吧。</View>
-      ) : (
-        sections.map((sec) => (
-          <View className='section' key={sec.day}>
-            <View className='section-head'>
-              <Text className='section-title'>{formatDayLabel(sec.day)}</Text>
-              <Text className='muted'>{sec.entries.length} 条</Text>
-            </View>
-            {sec.entries.map((e) => {
-              const en = enrichMap[e.id];
-              return (
-                <View
-                  className='card entry-card'
-                  key={e.id}
-                  onClick={() => Taro.navigateTo({ url: `/pages/detail/index?id=${e.id}` })}>
-                  <View className='card-head'>
-                    <Text className='muted'>{formatTime(e.created_at)}</Text>
-                    {e.anxiety !== null ? <Text className='chip'>焦虑 {e.anxiety}</Text> : null}
-                  </View>
-                  <Text className='card-content'>{e.content}</Text>
-                  {analyzingId === e.id ? (
-                    <Text className='summary analyzing'>✨ AI 分析中…</Text>
-                  ) : null}
-                  {en && en.topics.length > 0 ? (
-                    <View className='topic-row'>
-                      {en.topics.map((t) => (
-                        <Text className='chip topic' key={t}>
-                          {t}
-                        </Text>
-                      ))}
-                    </View>
-                  ) : null}
-                  {en && en.summary ? <Text className='summary'>🧭 {en.summary}</Text> : null}
-                </View>
-              );
-            })}
-          </View>
-        ))
-      )}
-    </View>
-  );
+      </div>
+    </AnimatedPage>
+  )
 }

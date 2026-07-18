@@ -11,6 +11,14 @@ const MODEL_CHAT = 'deepseek-chat';
 const MAX_ENTRIES = 40;
 const MAX_CONTENT_LEN = 80;
 
+export interface ProjectErr {
+  kind: string;
+  message: string;
+}
+export type ProjectResult =
+  | { ok: true; projection: Projection }
+  | { ok: false; error: ProjectErr };
+
 function projectSystem(years: number): string {
   return `你是一位擅长人生轨迹推演的分析师。用户会给你一份「最近的私人日志摘要」(按时间排列,每条前面有编号 [n])。请基于这些真实记录里透露的状态、选择、情绪和苗头,外推出这个人 ${years} 年后几种**可能**的人生路径。
 
@@ -94,9 +102,24 @@ function extractJsonObject(text: string): Record<string, unknown> | null {
   let s = String(text).trim();
   const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fence) s = fence[1].trim();
-  const start = s.indexOf('{');
+
+  // 从最后一个 '}' 反向找匹配的 '{'，避免 JSON 之前的文本里出现多余 '{'
   const end = s.lastIndexOf('}');
-  if (start === -1 || end === -1 || end < start) return null;
+  if (end === -1) return null;
+  let start = end;
+  let depth = 0;
+  let found = false;
+  for (let i = end; i >= 0; i--) {
+    if (s[i] === '}') depth++;
+    else if (s[i] === '{') depth--;
+    if (depth === 0) {
+      start = i;
+      found = true;
+      break;
+    }
+  }
+  if (!found) return null;
+
   try {
     const parsed = JSON.parse(s.slice(start, end + 1));
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;

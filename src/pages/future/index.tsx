@@ -1,146 +1,151 @@
-import { Text, View } from '@tarojs/components';
-import Taro from '@tarojs/taro';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-import { hasApiKey } from '@/ai/enrich';
-import { countEntries, listProjections } from '@/services/storage';
+import { deleteProjection, listProjections } from '@/services/storage';
 import { Projection } from '@/types/models';
 import { toDayString } from '@/utils/date';
+import { AnimatedPage } from '@/components/AnimatedPage';
+import { GlassCard } from '@/components/GlassCard';
+import { useTheme, MOOD_META } from '@/contexts/ThemeContext';
 
 import './index.scss';
 
 export default function Future() {
-  // 用 tick 做强制刷新：读 storage 在渲染阶段同步完成，不走 useEffect/useReady
-  const [tick, setTick] = useState(0);
-  const refresh = useCallback(() => setTick((t) => t + 1), []);
+  const navigate = useNavigate();
+  const theme = useTheme();
+  const moodMeta = MOOD_META[theme.mood];
+  const [projections, setProjections] = useState<Projection[]>([]);
 
-  // 同步读取（渲染时直接读 storage，无竞态）
-  let list: Projection[] = [];
-  let entryCount = 0;
-  let keyReady = false;
-  try {
-    list = listProjections();
-    entryCount = countEntries();
-    keyReady = hasApiKey();
-  } catch (e: any) {
-    console.error('[future] read storage error:', e.message || e);
-  }
+  const load = useCallback(() => {
+    setProjections(listProjections());
+  }, []);
 
-  const [busy, setBusy] = useState<number | null>(null);
-  const canProject = entryCount >= 3;
+  useEffect(() => {
+    load();
+  }, [load]);
 
-  const handleGenerate = useCallback(
-    async (years: number) => {
-      if (busy != null) return;
-      if (!hasApiKey()) {
-        Taro.showModal({
-          title: '还没设置 AI',
-          content: '推演需要 DeepSeek Key,去「我的」里填一次即可。',
-          confirmText: '去设置',
-          success: (r) => {
-            if (r.confirm) Taro.navigateTo({ url: '/pages/me/index' });
-          },
-        });
-        return;
-      }
-      setBusy(years);
-      try {
-        // 动态 import：只在真正需要推演时才加载大模块
-        const { projectFutures, describeProjectError } = await import('@/ai/project');
-        const res = await projectFutures(years);
-        setBusy(null);
-        if (res.ok) {
-          refresh();
-          Taro.navigateTo({ url: `/pages/projection/index?id=${res.projection.id}` });
-        } else {
-          Taro.showModal({
-            title: '推演没成功',
-            content: describeProjectError(res.error),
-            showCancel: false,
-          });
-        }
-      } catch (e: any) {
-        setBusy(null);
-        Taro.showModal({
-          title: '推演出错',
-          content: e.message || '未知错误',
-          showCancel: false,
-        });
+  const handleDelete = useCallback(
+    (e: React.MouseEvent, id: string) => {
+      e.stopPropagation();
+      if (confirm('确定删除这条推演记录？')) {
+        deleteProjection(id);
+        load();
       }
     },
-    [busy, refresh],
+    [load],
   );
 
   return (
-    <View className='page'>
-      {/* 推演入口 */}
-      <View className='card intro-card'>
-        <Text className='intro-title'>🔮 人生推演</Text>
-        <Text className='intro-text'>
-          让 AI 读你最近的记录,推演出几条 5 年 / 10 年后可能的人生路径。
-        </Text>
-        <View className='gen-row'>
-          <View
-            className={`gen-btn ${busy != null ? 'is-disabled' : ''}`}
-            onClick={() => handleGenerate(5)}
-          >
-            {busy === 5 ? '推演中…' : '推演 5 年后'}
-          </View>
-          <View
-            className={`gen-btn ${busy != null ? 'is-disabled' : ''}`}
-            onClick={() => handleGenerate(10)}
-          >
-            {busy === 10 ? '推演中…' : '推演 10 年后'}
-          </View>
-        </View>
-        {!keyReady ? (
-          <Text className='intro-hint' onClick={() => Taro.navigateTo({ url: '/pages/me/index' })}>
-            💡 还没设置 DeepSeek Key,点这里去「我的」填一次
-          </Text>
-        ) : !canProject ? (
-          <Text className='intro-hint'>
-            先记满 3 条以上,推演才有依据(现在 {String(entryCount)} 条)。
-          </Text>
-        ) : (
-          <Text className='intro-hint muted'>
-            推演会花几分钱、约十几秒;记得越多越准。
-          </Text>
-        )}
-      </View>
+    <AnimatedPage>
+      <div className="page">
+        {/* 页面头部 */}
+        <div className="glass-header">
+          <div>
+            <h1>人生推演</h1>
+            <div className="subtitle">AI 基于你的日记推演出的未来人生路径</div>
+          </div>
+        </div>
 
-      {/* 推演历史 */}
-      {list.length === 0 ? (
-        <View className='empty'>
-          还没有推演。上面选个年限,生成你的第一次「人生CT」。
-        </View>
-      ) : (
-        <View className='hist'>
-          <Text className='hist-title'>过往推演</Text>
-          {list.map((p) => (
-            <View
-              className='card proj-card'
-              key={p.id}
-              onClick={() =>
-                Taro.navigateTo({ url: `/pages/projection/index?id=${p.id}` })
-              }
-            >
-              <View className='proj-head'>
-                <Text className='proj-horizon'>
-                  {String(p.horizon_years ?? '?')} 年后
-                </Text>
-                <Text className='muted'>{toDayString(p.created_at)}</Text>
-              </View>
-              {p.summary ? (
-                <Text className='proj-summary'>{p.summary}</Text>
-              ) : null}
-              <Text className='proj-meta'>
-                {String(p.paths?.length ?? 0)} 条路径 · 基于{' '}
-                {String(p.entry_count ?? 0)} 条记录
-              </Text>
-            </View>
-          ))}
-        </View>
-      )}
-    </View>
+        {/* 创建入口 */}
+        <GlassCard className="glass-card-mood">
+          <div className="intro-title">🔮 未来推演</div>
+          <div className="intro-text">
+            让 AI 基于你的记录，推演出几条 5 年 / 10 年后可能的人生路径。
+          </div>
+          <button
+            className="glass-btn-hero"
+            onClick={() => navigate('/')}
+            style={{ marginTop: 16 }}
+          >
+            去写日记
+          </button>
+          <span className="glass-muted" style={{ display: 'block', marginTop: 10, fontSize: 13 }}>
+            先写日记，积累足够记录后再来推演
+          </span>
+        </GlassCard>
+
+        {/* 推演列表 */}
+        {projections.length === 0 ? (
+          <div className="empty">
+            <div className="empty-icon"
+              style={{
+                background: `linear-gradient(135deg, ${moodMeta.color}22, transparent)`,
+                borderRadius: '50%',
+                width: 80,
+                height: 80,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto var(--space-xl)',
+              }}
+            >🔮</div>
+            <p>还没有推演记录。</p>
+            <p className="mt-sm" style={{ color: 'var(--c-text-secondary)' }}>
+              先坚持写日记，再回来让 AI 帮你看见未来的可能。
+            </p>
+          </div>
+        ) : (
+          <div>
+            <div className="hist">
+              <span className="hist-title">过往推演</span>
+              {[...projections].reverse().map((p) => {
+                const stances = Object.values(p.stances ?? {});
+                const wantCount = stances.filter((s) => s === 'want').length;
+                const dontCount = stances.filter((s) => s === 'dont_want').length;
+
+                return (
+                  <div key={p.id}>
+                    <GlassCard
+                      onClick={() => navigate(`/projection/${p.id}`)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <div className="proj-head">
+                        <span className="glass-chip glass-chip-primary">
+                          {p.horizon_years}年推演
+                        </span>
+                        <span className="glass-muted">{toDayString(p.created_at)}</span>
+                      </div>
+
+                      {p.summary ? (
+                        <span className="proj-summary">{p.summary}</span>
+                      ) : null}
+
+                      <div className="proj-meta" style={{ marginBottom: 6 }}>
+                        {p.window_start} ~ {p.window_end} · 共 {p.paths.length} 条路径 ·
+                        基于 {p.entry_count} 条记录
+                      </div>
+
+                      {/* 立场汇总 */}
+                      {(wantCount > 0 || dontCount > 0) ? (
+                        <div className="flex items-center gap-sm" style={{ marginBottom: 8 }}>
+                          {wantCount > 0 ? (
+                            <span className="glass-chip glass-chip-success">
+                              想要 ×{wantCount}
+                            </span>
+                          ) : null}
+                          {dontCount > 0 ? (
+                            <span className="glass-chip glass-chip-danger">
+                              不想要 ×{dontCount}
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      {/* 删除按钮 */}
+                      <button
+                        className="glass-btn-ghost glass-btn-sm"
+                        onClick={(e) => handleDelete(e, p.id)}
+                      >
+                        删除
+                      </button>
+                    </GlassCard>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </AnimatedPage>
   );
 }
