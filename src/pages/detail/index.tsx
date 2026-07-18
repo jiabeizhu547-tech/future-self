@@ -1,15 +1,14 @@
-import { Button, Slider, Text, Textarea, View } from '@tarojs/components';
-import Taro, { useRouter } from '@tarojs/taro';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 
-import { describeEnrichError, enrichEntry, hasApiKey } from '@/ai/enrich';
+import { enrichEntry, hasApiKey } from '@/ai/enrich';
 import { getEnrichment, getEntry, softDeleteEntry, updateEntry } from '@/services/storage';
 import { Enrichment, Entry, SignalDirection } from '@/types/models';
 import { formatDayLabel, formatTime } from '@/utils/date';
+import { GlassCard } from '@/components/GlassCard';
 
-import './index.scss';
-
-const MOOD_TEXT = ['很低落', '低落', '平静', '不错', '很好'];
+const MOOD_EMOJI = ['😡', '🙁', '😐', '🙂', '😄'];
+const MOOD_VALUES = [-2, -1, 0, 1, 2];
 
 const DIR_COLOR: Record<SignalDirection, string> = {
   toward_wanted: '#34c759',
@@ -23,62 +22,63 @@ const DIR_LABEL: Record<SignalDirection, string> = {
 };
 
 export default function Detail() {
-  const router = useRouter();
-  const id = (router.params.id as string) || '';
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [entry, setEntry] = useState<Entry | null>(null);
   const [enrichment, setEnrichment] = useState<Enrichment | null>(null);
   const [content, setContent] = useState('');
-  const [showMeta, setShowMeta] = useState(false);
-  const [mood, setMood] = useState(0);
+  const [mood, setMood] = useState<number>(0);
   const [anxiety, setAnxiety] = useState(3);
   const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
+    console.log('[Detail] id from useParams:', id);
+    if (!id) return;
     const e = getEntry(id);
+    console.log('[Detail] entry found:', !!e);
     setEntry(e);
     setEnrichment(getEnrichment(id));
     if (e) {
       setContent(e.content);
-      setShowMeta(e.mood !== null || e.anxiety !== null);
       setMood(e.mood ?? 0);
       setAnxiety(e.anxiety ?? 3);
     }
   }, [id]);
 
+  // Auto-resize textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
+    }
+  }, [content]);
+
   function handleSave() {
+    if (!id) return;
     if (!content.trim()) return;
     updateEntry(id, {
       content,
-      mood: showMeta ? mood : null,
-      anxiety: showMeta ? anxiety : null,
+      mood,
+      anxiety,
     });
-    Taro.navigateBack();
+    navigate(-1);
   }
 
   function handleDelete() {
-    Taro.showModal({
-      title: '删除这条记录?',
-      content: '删除后不再显示,也不参与将来的趋势与推演。',
-      confirmText: '删除',
-      confirmColor: '#ff3b30',
-      success: (res) => {
-        if (res.confirm) {
-          softDeleteEntry(id);
-          Taro.navigateBack();
-        }
-      },
-    });
+    if (!id) return;
+    const ok = confirm('删除这条记录？\n删除后不再显示，也不参与将来的趋势与推演。');
+    if (ok) {
+      softDeleteEntry(id);
+      navigate(-1);
+    }
   }
 
   async function handleAnalyze() {
-    if (analyzing) return;
+    if (!id || analyzing) return;
     if (!hasApiKey()) {
-      Taro.showModal({
-        title: '还没设置 DeepSeek Key',
-        content: '去「我的」里填一次 Key,就能让 AI 分析这条记录。',
-        showCancel: false,
-      });
+      alert('还没设置 DeepSeek Key。去「我的」里填一次 Key，就能让 AI 分析这条记录。');
       return;
     }
     setAnalyzing(true);
@@ -86,117 +86,165 @@ export default function Detail() {
     setAnalyzing(false);
     if (res.ok) {
       setEnrichment(res.enrichment);
-      Taro.showToast({ title: '分析完成', icon: 'success' });
     } else {
-      Taro.showModal({ title: '分析失败', content: describeEnrichError(res.error), showCancel: false });
+      alert('分析失败，可稍后重试。');
     }
   }
 
   if (!entry) {
     return (
-      <View className='page'>
-        <Text className='muted'>记录不存在或已删除。</Text>
-      </View>
+      <div className="page">
+        <span className="glass-muted">记录不存在或已删除。</span>
+      </div>
     );
   }
 
   return (
-    <View className='page'>
-      <Text className='muted'>
-        {formatDayLabel(entry.day)} {formatTime(entry.created_at)}
-      </Text>
+    <div className="page">
+        {/* 页面头部 */}
+        <div className="glass-header">
+          <button className="glass-btn-ghost" onClick={() => navigate(-1)}>
+            ← 返回
+          </button>
+          <h1>编辑记录</h1>
+          <div style={{ width: 60 }} />
+        </div>
 
-      <Textarea
-        className='input detail-input'
-        value={content}
-        onInput={(e) => setContent(e.detail.value)}
-        autoHeight
-        maxlength={-1}
-      />
+        {/* 日期 */}
+        <div className="glass-muted" style={{ marginBottom: 12 }}>
+          {formatDayLabel(entry.day)} {formatTime(entry.created_at)}
+          {entry.updated_at !== entry.created_at && (
+            <span style={{ marginLeft: 8, fontSize: 12 }}>
+              (编辑于 {formatTime(entry.updated_at)})
+            </span>
+          )}
+        </div>
 
-      {showMeta ? (
-        <View className='meta'>
-          <Text className='meta-label'>心情:{MOOD_TEXT[mood + 2]}</Text>
-          <Slider
-            min={-2}
-            max={2}
-            step={1}
-            value={mood}
-            activeColor='#34c759'
-            blockSize={20}
-            onChanging={(e) => setMood(e.detail.value)}
-            onChange={(e) => setMood(e.detail.value)}
+        {/* 内容编辑区 */}
+        <GlassCard>
+          <textarea
+            ref={textareaRef}
+            className="glass-input"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="编辑这条记录…"
+            style={{ minHeight: 160 }}
           />
-          <Text className='meta-label'>焦虑:{anxiety}/10</Text>
-          <Slider
-            min={0}
-            max={10}
-            step={1}
-            value={anxiety}
-            activeColor='#ff9500'
-            blockSize={20}
-            onChanging={(e) => setAnxiety(e.detail.value)}
-            onChange={(e) => setAnxiety(e.detail.value)}
-          />
-          <Text className='meta-toggle' onClick={() => setShowMeta(false)}>
-            移除心情/焦虑标记
-          </Text>
-        </View>
-      ) : (
-        <Text className='meta-toggle' onClick={() => setShowMeta(true)}>
-          ＋ 标记心情 / 焦虑
-        </Text>
-      )}
+        </GlassCard>
 
-      <Button className='save-btn' onClick={handleSave}>
-        保存修改
-      </Button>
+        {/* 心情选择器 */}
+        <GlassCard delay={0.05}>
+          <div className="mood-selector">
+            {MOOD_EMOJI.map((emoji, i) => (
+              <button
+                key={MOOD_VALUES[i]}
+                className={`glass-mood-btn${mood === MOOD_VALUES[i] ? ' selected' : ''}`}
+                onClick={() => setMood(MOOD_VALUES[i])}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
 
-      <Button className='analyze-btn' loading={analyzing} onClick={handleAnalyze}>
-        {analyzing ? '分析中…' : enrichment ? '重新分析' : '✨ 分析这条'}
-      </Button>
+          <div className="glass-slider-row">
+            <label>焦虑</label>
+            <input
+              type="range"
+              min={0}
+              max={10}
+              step={1}
+              value={anxiety}
+              onChange={(e) => setAnxiety(Number(e.target.value))}
+            />
+            <span className="slider-value">{anxiety}/10</span>
+          </div>
+        </GlassCard>
 
-      {/* AI 分析(有结果才展示) */}
-      {enrichment ? (
-        <View className='card ai-card'>
-          <Text className='ai-title'>✨ AI 分析</Text>
-          {enrichment.summary ? <Text className='ai-summary'>🧭 {enrichment.summary}</Text> : null}
-          <View className='ai-metrics'>
-            <Text className='muted'>
+        {/* 保存按钮 */}
+        <button className="glass-btn-hero" onClick={handleSave}>
+          保存修改
+        </button>
+
+        {/* 分析按钮 */}
+        <div style={{ marginTop: 8 }}>
+          <button
+            className="glass-btn-hero"
+            onClick={handleAnalyze}
+            disabled={analyzing}
+          >
+            {analyzing ? '分析中…' : enrichment ? '重新分析' : '✨ 分析这条'}
+          </button>
+        </div>
+
+        {/* AI 富化结果 */}
+        {enrichment ? (
+          <GlassCard delay={0.1}>
+            <div className="glass-card-header">
+              <span className="glass-card-title">AI 分析</span>
+            </div>
+
+            {enrichment.summary ? (
+              <div className="glass-muted" style={{ marginBottom: 12, fontSize: 15, lineHeight: 1.5 }}>
+                🧭 {enrichment.summary}
+              </div>
+            ) : null}
+
+            {/* 指标 */}
+            <div className="glass-muted" style={{ marginBottom: 12 }}>
               效价 {fmtSigned(enrichment.valence)} · 焦虑{' '}
               {enrichment.anxiety_ai != null ? `${enrichment.anxiety_ai}/10` : '—'} · 精力{' '}
               {enrichment.energy != null ? enrichment.energy.toFixed(1) : '—'}
-            </Text>
-          </View>
-          {enrichment.topics.length > 0 ? (
-            <View className='topic-row'>
-              {enrichment.topics.map((t) => (
-                <Text className='chip topic' key={t}>
-                  {t}
-                </Text>
-              ))}
-            </View>
-          ) : null}
-          {enrichment.people.length > 0 ? (
-            <Text className='muted people'>👤 {enrichment.people.join('、')}</Text>
-          ) : null}
-          {enrichment.signals.map((s, i) => (
-            <View className='signal' key={i}>
-              <Text className='signal-dir' style={{ color: DIR_COLOR[s.direction] }}>
-                {DIR_LABEL[s.direction]}
-              </Text>
-              <Text className='muted signal-text'>{s.text}</Text>
-            </View>
-          ))}
-        </View>
-      ) : null}
+            </div>
 
-      <View className='delete-row'>
-        <Text className='danger' onClick={handleDelete}>
-          删除这条
-        </Text>
-      </View>
-    </View>
+            {/* 主题 */}
+            {enrichment.topics.length > 0 ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                {enrichment.topics.map((t) => (
+                  <span className="glass-chip glass-chip-primary" key={t}>
+                    {t}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+
+            {/* 人物 */}
+            {enrichment.people.length > 0 ? (
+              <div className="glass-muted" style={{ marginBottom: 10 }}>
+                👤 {enrichment.people.join('、')}
+              </div>
+            ) : null}
+
+            {/* 信号 */}
+            {enrichment.signals.map((s, i) => (
+              <div
+                key={i}
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 8,
+                  marginTop: 6,
+                }}
+              >
+                <span
+                  className={`glass-chip ${s.direction === 'toward_wanted' ? 'glass-chip-success' : s.direction === 'toward_unwanted' ? 'glass-chip-danger' : ''}`}
+                >
+                  {DIR_LABEL[s.direction]}
+                </span>
+                <span className="glass-muted" style={{ flex: 1 }}>
+                  {s.text}
+                </span>
+              </div>
+            ))}
+          </GlassCard>
+        ) : null}
+
+        {/* 删除 */}
+        <div style={{ marginTop: 40, textAlign: 'center' }}>
+          <button className="glass-btn-danger" onClick={handleDelete}>
+            删除这条
+          </button>
+        </div>
+      </div>
   );
 }
 

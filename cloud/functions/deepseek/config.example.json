@@ -3,6 +3,6 @@
     "openapi": []
   },
   "env": {
-    "DEEPSEEK_API_KEY": "sk-你的key填这里"
+    "DEEPSEEK_API_KEY": ""
   }
 }

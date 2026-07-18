@@ -1,32 +1,35 @@
-// 本地存储服务(基于小程序 Storage)。Phase 0 数据只在本设备。
-// 之后接入云开发时,可在此层替换为云数据库读写,页面无需改动。
+// 本地存储服务(基于 localStorage)。所有数据只在本设备。
+// 与小程序版 API 完全一致，底层由 Taro.storage 迁移为 localStorage。
 
-import Taro from '@tarojs/taro';
-
-import { CalibrationInsight, Enrichment, Entry, EntryPatch, NewEntry, Projection, Signal, SignalDirection, Stance } from '@/types/models';
+import { CalibrationInsight, Enrichment, Entry, EntryPatch, NewEntry, Projection, Signal, SignalDirection } from '@/types/models';
 import { nowMs, toDayString } from '@/utils/date';
 import { genId } from '@/utils/id';
 
-const ENTRIES_KEY = 'entries';
-const ENRICH_KEY = 'enrichments';
-const PROJECTIONS_KEY = 'projections';
+const ENTRIES_KEY = 'fs_entries';
+const ENRICH_KEY = 'fs_enrichments';
+const PROJECTIONS_KEY = 'fs_projections';
+const CALIBRATION_KEY = 'fs_calibrations';
 
 function readEntries(): Entry[] {
-  const v = Taro.getStorageSync(ENTRIES_KEY);
-  return Array.isArray(v) ? (v as Entry[]) : [];
+  try {
+    const v = localStorage.getItem(ENTRIES_KEY);
+    return v ? JSON.parse(v) : [];
+  } catch { return []; }
 }
 
 function writeEntries(list: Entry[]): void {
-  Taro.setStorageSync(ENTRIES_KEY, list);
+  localStorage.setItem(ENTRIES_KEY, JSON.stringify(list));
 }
 
 function readEnrichments(): Record<string, Enrichment> {
-  const v = Taro.getStorageSync(ENRICH_KEY);
-  return v && typeof v === 'object' ? (v as Record<string, Enrichment>) : {};
+  try {
+    const v = localStorage.getItem(ENRICH_KEY);
+    return v ? JSON.parse(v) : {};
+  } catch { return {}; }
 }
 
 function writeEnrichments(map: Record<string, Enrichment>): void {
-  Taro.setStorageSync(ENRICH_KEY, map);
+  localStorage.setItem(ENRICH_KEY, JSON.stringify(map));
 }
 
 /** 全部记录,按时间倒序(不含已删除)。 */
@@ -105,12 +108,14 @@ export function saveEnrichment(en: Enrichment): void {
 /* ---------- 人生推演 ---------- */
 
 function readProjections(): Projection[] {
-  const v = Taro.getStorageSync(PROJECTIONS_KEY);
-  return Array.isArray(v) ? (v as Projection[]) : [];
+  try {
+    const v = localStorage.getItem(PROJECTIONS_KEY);
+    return v ? JSON.parse(v) : [];
+  } catch { return []; }
 }
 
 function writeProjections(list: Projection[]): void {
-  Taro.setStorageSync(PROJECTIONS_KEY, list);
+  localStorage.setItem(PROJECTIONS_KEY, JSON.stringify(list));
 }
 
 /** 全部推演,最新在前。 */
@@ -135,7 +140,7 @@ export function deleteProjection(id: string): void {
 }
 
 /** 给某条推演的某条路径打标(想要/不想要/中立)。 */
-export function setPathStance(projectionId: string, pathIndex: number, stance: Stance): void {
+export function setPathStance(projectionId: string, pathIndex: number, stance: 'want' | 'dont_want' | 'neutral'): void {
   const list = readProjections();
   const idx = list.findIndex((p) => p.id === projectionId);
   if (idx < 0) return;
@@ -148,15 +153,15 @@ export function setPathStance(projectionId: string, pathIndex: number, stance: S
 
 /* ---------- 校准洞察 ---------- */
 
-const CALIBRATION_KEY = 'calibrations';
-
 function readCalibrations(): Record<string, CalibrationInsight> {
-  const v = Taro.getStorageSync(CALIBRATION_KEY);
-  return v && typeof v === 'object' ? (v as Record<string, CalibrationInsight>) : {};
+  try {
+    const v = localStorage.getItem(CALIBRATION_KEY);
+    return v ? JSON.parse(v) : {};
+  } catch { return {}; }
 }
 
 function writeCalibrations(map: Record<string, CalibrationInsight>): void {
-  Taro.setStorageSync(CALIBRATION_KEY, map);
+  localStorage.setItem(CALIBRATION_KEY, JSON.stringify(map));
 }
 
 /** 校准 key = projection_id + '|' + path_index */
@@ -174,13 +179,8 @@ export function saveCalibration(c: CalibrationInsight): void {
   writeCalibrations(map);
 }
 
-/* ---------- 导出(备份到剪贴板/文件)---------- */
+/* ---------- 导出(备份)---------- */
 
-/**
- * 把本地全部数据导出成 JSON 文本。
- * 包含：记录、AI 富化、人生推演、校准洞察。
- * 格式与 importFromJson 对齐，可原样重新导入。
- */
 export function exportToJson(): string {
   const entries = readEntries().filter((e) => !e.deleted);
   const enMap = readEnrichments();
@@ -212,7 +212,6 @@ export function exportToJson(): string {
     });
 
   const projections = readProjections();
-
   const calibrations = readCalibrations();
 
   return JSON.stringify({
@@ -224,7 +223,6 @@ export function exportToJson(): string {
   });
 }
 
-/** 不含 entries 的纯数据导出（用于导入时的投影+校准合并）。 */
 export function exportProjectionsOnly(): string {
   return JSON.stringify({
     version: 2,
@@ -235,7 +233,7 @@ export function exportProjectionsOnly(): string {
   });
 }
 
-/* ---------- 导入(从旧版 JSON 备份迁移)---------- */
+/* ---------- 导入(从 JSON 备份恢复)---------- */
 
 export interface ImportResult {
   imported: number;
@@ -247,7 +245,7 @@ export interface ImportResult {
   calibSkipped?: number;
 }
 
-const DIRS: SignalDirection[] = ['toward_wanted', 'toward_unwanted', 'neutral'];
+const DIRS: Signal['direction'][] = ['toward_wanted', 'toward_unwanted', 'neutral'];
 
 function coerceSignals(v: unknown): Signal[] {
   if (!Array.isArray(v)) return [];
@@ -257,8 +255,8 @@ function coerceSignals(v: unknown): Signal[] {
     const o = item as Record<string, unknown>;
     const text = typeof o.text === 'string' ? o.text.trim() : '';
     if (!text) continue;
-    const dir = DIRS.includes(o.direction as SignalDirection)
-      ? (o.direction as SignalDirection)
+    const dir = DIRS.includes(o.direction as Signal['direction'])
+      ? (o.direction as Signal['direction'])
       : 'neutral';
     out.push({ text, direction: dir });
   }
@@ -269,11 +267,6 @@ function coerceStrArray(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
 }
 
-/**
- * 从导出的 JSON 文本导入全部数据(记录 + AI 富化 + 推演 + 校准)。
- * 按 (created_at + 内容) 去重，重复的跳过，粘贴多次也安全。
- * 推演和校准直接合并（按 id 去重，已存在的跳过）。
- */
 export function importFromJson(jsonText: string): ImportResult {
   let data: any;
   try {
