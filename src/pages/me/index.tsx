@@ -2,6 +2,7 @@ import { Button, Input, Text, Textarea, View } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import { useState } from 'react';
 
+import { checkCloudReady } from '@/ai/client';
 import { clearApiKey, getApiKey, hasApiKey, setApiKey } from '@/ai/enrich';
 import { countEntries, exportToJson, importFromJson, listProjections } from '@/services/storage';
 
@@ -16,11 +17,13 @@ export default function Me() {
   const [keySet, setKeySet] = useState(false);
   const [editingKey, setEditingKey] = useState(false);
   const [keyInput, setKeyInput] = useState('');
+  const [cloudReady, setCloudReady] = useState(false);
 
   useDidShow(() => {
     setCount(countEntries());
     setProjCount(listProjections().length);
     setKeySet(hasApiKey());
+    checkCloudReady().then((ok) => setCloudReady(ok));
   });
 
   function handleSaveKey() {
@@ -131,10 +134,14 @@ export default function Me() {
       <View className='card'>
         <View className='key-head'>
           <Text className='card-title'>✨ DeepSeek AI 分析</Text>
-          <Text className={`key-status ${keySet ? 'on' : ''}`}>{keySet ? '已连接' : '未设置'}</Text>
+          <Text className={`key-status ${cloudReady || keySet ? 'on' : ''}`}>{cloudReady ? '云函数' : keySet ? '已连接' : '未设置'}</Text>
         </View>
 
-        {editingKey || !keySet ? (
+        {cloudReady ? (
+          <Text className='muted'>
+            AI 调用走云函数代理，Key 存在服务端，不会下发到客户端。无需额外配置。
+          </Text>
+        ) : editingKey || !keySet ? (
           <View>
             <Input
               className='key-input'

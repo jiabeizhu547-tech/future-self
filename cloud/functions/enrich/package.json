@@ -1,7 +1,0 @@
-{
-  "name": "enrich",
-  "version": "1.0.0",
-  "description": "调用 DeepSeek 富化一条日志记录",
-  "main": "index.js",
-  "dependencies": {}
-}
