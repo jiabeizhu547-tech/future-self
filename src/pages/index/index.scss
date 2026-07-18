@@ -1,0 +1,104 @@
+.composer {
+  margin-bottom: 16rpx;
+}
+
+.hint {
+  display: block;
+  color: #8a8f99;
+  font-size: 26rpx;
+  margin-bottom: 12rpx;
+}
+
+.meta {
+  background: #ffffff;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  margin-top: 16rpx;
+}
+
+.meta-label {
+  display: block;
+  font-size: 26rpx;
+  color: #4a4f57;
+  margin-top: 8rpx;
+}
+
+.meta-toggle {
+  display: inline-block;
+  margin-top: 16rpx;
+  color: #8a8f99;
+  font-size: 26rpx;
+}
+
+.me-row {
+  margin-top: 20rpx;
+  text-align: center;
+}
+
+.nav-link {
+  margin: 0 20rpx;
+}
+
+.key-hint {
+  display: block;
+  margin-top: 16rpx;
+  text-align: center;
+  color: #3c87f7;
+  font-size: 24rpx;
+}
+
+
+.section {
+  margin-top: 20rpx;
+}
+
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12rpx 8rpx;
+}
+
+.section-title {
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.entry-card {
+  margin-bottom: 16rpx;
+}
+
+.card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10rpx;
+}
+
+.card-content {
+  display: block;
+  font-size: 30rpx;
+  line-height: 1.5;
+}
+
+.topic-row {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 12rpx;
+}
+
+.topic {
+  margin-right: 10rpx;
+  margin-bottom: 8rpx;
+}
+
+.summary {
+  display: block;
+  margin-top: 12rpx;
+  color: #8a8f99;
+  font-size: 26rpx;
+}
+
+.analyzing {
+  color: #3c87f7;
+}

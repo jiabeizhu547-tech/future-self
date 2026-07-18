@@ -1,0 +1,91 @@
+/* 全局样式(app.scss 在小程序里是全局的,各页复用这里的类)。 */
+
+page {
+  background: #f5f6f8;
+  color: #1a1a1a;
+  font-size: 30rpx;
+}
+
+/* 去掉小程序 Button 默认边框 */
+button::after {
+  border: none;
+}
+
+.page {
+  padding: 24rpx;
+  padding-bottom: 80rpx;
+  box-sizing: border-box;
+}
+
+.muted {
+  color: #8a8f99;
+  font-size: 26rpx;
+  line-height: 1.6;
+}
+
+.card {
+  background: #ffffff;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  margin-bottom: 16rpx;
+}
+
+.input {
+  display: block;
+  width: 100%;
+  background: #ffffff;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  min-height: 200rpx;
+  font-size: 30rpx;
+  line-height: 1.5;
+  box-sizing: border-box;
+}
+
+.save-btn {
+  margin-top: 20rpx;
+  background: #3c87f7;
+  color: #ffffff;
+  border-radius: 16rpx;
+  font-size: 30rpx;
+  line-height: 2.6;
+}
+
+.save-btn.disabled {
+  background: #c8ccd2;
+  color: #ffffff;
+}
+
+.chip {
+  background: #eef1f5;
+  color: #4a4f57;
+  font-size: 24rpx;
+  padding: 4rpx 14rpx;
+  border-radius: 999rpx;
+}
+
+.link {
+  color: #3c87f7;
+  font-size: 28rpx;
+}
+
+.danger {
+  color: #ff3b30;
+  font-size: 28rpx;
+}
+
+.empty {
+  text-align: center;
+  color: #8a8f99;
+  font-size: 28rpx;
+  padding: 80rpx 40rpx;
+  line-height: 1.6;
+}
+
+.empty-guide {
+  text-align: center;
+  color: #8a8f99;
+  font-size: 26rpx;
+  padding: 40rpx 24rpx;
+  line-height: 1.7;
+}

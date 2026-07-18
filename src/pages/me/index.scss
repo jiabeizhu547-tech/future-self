@@ -1,0 +1,90 @@
+.stat {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.stat-label {
+  font-size: 30rpx;
+}
+
+.stat-value {
+  font-size: 30rpx;
+  font-weight: 700;
+}
+
+.card-title {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 600;
+  margin-bottom: 12rpx;
+}
+
+.version {
+  display: block;
+  text-align: center;
+  color: #8a8f99;
+  font-size: 24rpx;
+  margin-top: 40rpx;
+}
+
+.import-input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 200rpx;
+  margin-top: 16rpx;
+  padding: 20rpx;
+  background: #f5f6f8;
+  border-radius: 16rpx;
+  font-size: 26rpx;
+  line-height: 1.5;
+}
+
+.key-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.key-status {
+  font-size: 24rpx;
+  color: #8a8f99;
+}
+
+.key-status.on {
+  color: #34c759;
+}
+
+.key-input {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 16rpx;
+  padding: 20rpx;
+  background: #f5f6f8;
+  border-radius: 16rpx;
+  font-size: 26rpx;
+}
+
+.key-tip {
+  display: block;
+  margin-top: 12rpx;
+}
+
+.key-actions {
+  display: flex;
+  margin-top: 12rpx;
+}
+
+.key-actions .link {
+  margin-right: 32rpx;
+}
+
+.danger {
+  color: #ff3b30;
+}

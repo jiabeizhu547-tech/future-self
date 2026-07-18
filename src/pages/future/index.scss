@@ -1,0 +1,97 @@
+.intro-card {
+  text-align: left;
+}
+
+.intro-title {
+  display: block;
+  font-size: 34rpx;
+  font-weight: 700;
+  margin-bottom: 12rpx;
+}
+
+.intro-text {
+  display: block;
+  font-size: 26rpx;
+  color: #4a4f57;
+  line-height: 1.6;
+}
+
+.gen-row {
+  display: flex;
+  margin-top: 24rpx;
+}
+
+.gen-btn {
+  flex: 1;
+  margin: 0 8rpx;
+  padding: 22rpx 0;
+  text-align: center;
+  font-size: 28rpx;
+  line-height: 1.2;
+  border-radius: 12rpx;
+  background: #3c87f7;
+  color: #ffffff;
+}
+
+.gen-btn.is-disabled {
+  background: #c7d6f0;
+  color: #ffffff;
+}
+
+.gen-btn-hover {
+  background: #2f6fd0;
+}
+
+.intro-hint {
+  display: block;
+  margin-top: 20rpx;
+  font-size: 24rpx;
+  color: #3c87f7;
+  line-height: 1.5;
+}
+
+.intro-hint.muted {
+  color: #8a8f99;
+}
+
+.hist {
+  margin-top: 24rpx;
+}
+
+.hist-title {
+  display: block;
+  font-size: 26rpx;
+  color: #8a8f99;
+  margin: 8rpx 0 12rpx 8rpx;
+}
+
+.proj-card {
+  margin-bottom: 16rpx;
+}
+
+.proj-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10rpx;
+}
+
+.proj-horizon {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.proj-summary {
+  display: block;
+  font-size: 28rpx;
+  color: #2a2d33;
+  line-height: 1.5;
+  margin-bottom: 10rpx;
+}
+
+.proj-meta {
+  display: block;
+  font-size: 24rpx;
+  color: #8a8f99;
+}

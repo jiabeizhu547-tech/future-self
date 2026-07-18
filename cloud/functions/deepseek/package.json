@@ -1,0 +1,9 @@
+{
+  "name": "deepseek-proxy",
+  "version": "1.0.0",
+  "description": "代理 DeepSeek API 调用，Key 存服务端不泄露",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "latest"
+  }
+}
