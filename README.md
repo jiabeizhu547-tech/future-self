@@ -112,6 +112,3 @@ All journal entries and AI results are stored **only on your device** via WeChat
 
 Use the "Export" button in the Me tab to back up all your data as a JSON file. The export includes entries, enrichments, projections, and calibrations. You can re-import this file to restore your data.
 
-## License
-
-MIT
